@@ -1,0 +1,125 @@
+# CS358, Winter 2025
+
+# Conditionals Mystery Language
+
+The purpose of this exercise is to explore different possible
+semantics for a simple language that includes boolean and arithmetic
+expressions, and `let` bindings as described in class and studied in
+the coding exercises.
+
+In the real world, when we want to understand the semantics of a new
+language or language feature, a common approach is to write
+exploratory tests and try them out on an implementation.  By careful
+crafting of these tests, we can often tease out an understanding of
+some subtle language features.  This exercise makes a game out of this
+test-based or "experimental" semantics. The idea is due to Shriram Krishnamurthi's paper
+<https://cs.brown.edu/~sk/Publications/Papers/Published/pkf-teach-pl-exp-adv-think/>,
+but this realization of it is a local PSU effort.
+
+To explore the mystery language, you should load the page at
+
+https://andrewtolmach.github.io/mysteries/cond
+
+which displays a testing framework.  This is very similar to the page
+we explored in class, but the language syntax and semantics are quite
+different! As usual, you can enter expressions and see how they
+parse. In addition, for expressions that parse successfully, you will
+see the result of evaluating the expression using *four different
+interpreters* each representing a *different possible semantics* for
+the language. The different variants of the semantics are called A,B,
+C, and D.
+
+Your task is to figure out the differences among these four variants
+by finding test inputs that cause them to produce different
+output. Typically, a single test might behave the same way under three
+of the variants, and differently on a fourth.  You need to gather a
+small *set* of tests (typically no more than 4 or 5) called
+*discriminators*. Each discriminator must produce different output on
+at least two variants, and the set taken as a whole must distinguish
+*all* the variants. (We call the set a *classifier* for the variants.)
+This implies that each pair of languages must be distinguished by at
+least one discriminator. This will require a good deal of
+experimentation!
+
+Note that as you perform tests, the results will be recorded in a log
+at the bottom of the web page. You can cut and paste from that log to
+prepare your solution file as described below. WARNING: The log only
+lasts a long as the web page stays open in your browser, so be sure to
+capture it before the end of every testing session.
+
+In addition to the classifier, you must come up with a reasonable
+English-language explanation of what you think the underlying behavior
+of each variant is intended to be, and support it with the evidence of
+your classifier tests. Think of this as an exercise in building a
+scientific theory (your proposed underlying behaviors) to support
+observed experimental facts (the classifier test results). As you are
+building your explanation, you may want to go back and refine your
+classifier to include more precise or clear tests.
+
+Put your classifier and your explanation together into a plain-text
+file `mystery.txt`. The format of this file should be a sequence of
+lines describing the tests, followed by a *blank line*, followed by
+the English-language explanation on as many lines as needed. Each test
+line should be in the following form (where white space can be one or
+more spaces or tabs)
+
+```
+#n: "input string" A: "result" B: "result" C: "result" D: "result"
+```
+
+where `n` is a positive number. The values of `n` don't matter; the
+numbers are just there to make it easy for you to refer to different
+tests from your explanation text.
+
+Note that this is the same format as produced in the web page log, to
+facilitate cutting and pasting. But please don't cut and paste *all*
+your tests: just include a minimal set that is needed to form a
+classifier.
+
+# Language
+
+This is a conventional expression language involving numbers and
+booleans, with the usual arithmetic operators (`+`,`-`,`*`,`/`,`^`)
+and boolean operators (`&&`,`||`,`!`), equality comparison operators
+(`==`,`!=`), relational comparison operators (`<`,`<=`,`>`,`>=`), a
+conditional expression (`if e1 then e2 else e3`), let bindings (`let x
+= e1 in e2`) and variable names.  Note that the *syntax* of all four
+variants is the same.
+
+The main focus of your experimentation should be the test
+subexpression of the conditional (`if-then-else`) expression, and on
+the (possibly) different treatment of numbers and boolean operands to
+the operators, especially the comparison operators (`==`, `!=`, `<`,
+`<=`, '>`, `>=`).  What types of values are legal in these spots, and
+how are they interpreted?  The semantics of these features differs
+among the four variants (sometimes in subtle ways). Note that behavior
+of these operators is intended to be fairly uniform in each language;
+so, for example, if you undertand the behavior of `<` it should be
+unnecessary to investigate the behavior of `<=` in detail. (But the
+two equality comparison operators may behave differently from the four
+relational comparison operators.)
+
+# Important Notes
+
+The interpreter is capable of failing with several different kinds of
+exceptions, including "name is not in environment" and various type
+errors, e.g. trying to add `1 + true`, which may produce "expected
+number, got boolean."  For the purposes of defining a discriminator,
+an exception result is still a result, and is different from any
+non-exception result (number or Boolean) and from other exception
+results with different text.  So, for example, if you have a test that
+produces "name not in environment" on one variant and "expected
+number, got boolean" on another variant, that counts as a
+discriminator between those two variants.  *You may find it useful to
+provoke exceptions deliberately* in your discriminators.
+
+The entry box for expressions is deliberately not very big, to
+encourage you to *keep your tests short.* There is no need for
+discriminators to be large!
+
+Again, your classifier set should be no bigger than it needs to be to
+discriminate all variants. On the other hand, there is no particular
+virtue in reducing the set to just one test; indeed, that is likely to
+make it harder to develop a good theory of what is going on in each
+variant.
+
