@@ -1,3 +1,7 @@
+# Extra Packages:
+# Name: pillow
+# Version: 11.1.0
+
 from dataclasses import dataclass
 from PIL import Image
 
@@ -309,11 +313,22 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                     except:
                         raise ValueError("Image path not found, couldn't open")
                     merged_img = merge(im_l, im_r)
-                    outfile = "result.jpg"
+                    outfile = "result_stitch.jpg"
                     merged_img.save(outfile)
                     return ImgPath(outfile)
                 case _:
                     raise EvalError("Cannot stitch non-images")
+        case Rotate90(i):
+            match (evalInEnv(env, i)):
+                case ImgPath(i):
+                    try:
+                        img = Image.open(i.path)
+                    except:
+                        raise ValueError("Image path not found")
+                    out = img.rotate(270)
+                    outfile = "result_rotate.jpg"
+                    out.save(outfile)
+                    return ImgPath(outfile)
 
 def run(e: Expr) -> None:
     print(f"running {e}")
@@ -347,6 +362,23 @@ f : Expr =  Let('x', Lit(2),
 
 g : Expr = StitchHorizontal(Lit(ImgPath("hopper.jpg")), Lit(ImgPath("hopper.jpg")))
 
-h : Expr = Add(Lit(-69), Lit(False))
+h : Expr = Rotate90(Lit(ImgPath("hopper.jpg")))
 
+run(a)
+run(b)
+run(c)
+
+run(d)
+run(f)
+run(g)
 run(h)
+
+'''
+I decided to implement the "Images" DSL for this project 
+
+The domain-specific features that I've implemented so far are the StitchHorizontal and Rotate90 functions
+
+These allow a user to provide a ImgPath literal that contains the path to the image they want to manipulate
+
+The result of the image manipulation is stored as a jpg in the users current working directory and is automatically opened after evaluation
+'''
