@@ -1,0 +1,22 @@
+%import common.INT -> INT
+%import common.CNAME -> ID
+%import common.WS
+
+%ignore WS
+
+?expr: expr "+" term  -> plus
+     | expr "-" term -> minus
+     | term
+
+?term: term "*" factor -> times
+     | term "/" factor -> divide
+     | factor
+
+?factor: "-" factor  -> neg
+       |  atom
+
+?atom: ID  -> id
+       | INT -> int
+       | "(" expr ")"    
+       | "let" ID "=" expr "in" expr "end" -> let
+
