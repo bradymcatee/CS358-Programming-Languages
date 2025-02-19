@@ -4,6 +4,7 @@
 
 from dataclasses import dataclass
 from PIL import Image
+from typing import Callable
 
 @dataclass
 class ImgPath():
@@ -122,8 +123,35 @@ class Rotate90():
     def __str__(self) -> str:
         return f"{self.image} rotated 90 clockwise"
 
+@dataclass
+class LetFun():
+    fname: str         
+    param: str         
+    body: Expr        
+    inexp: Expr      
+    def __str__(self) -> str:
+        return f"(letfun {self.fname}({self.param}) = {self.body} in {self.inexp})"
+
+@dataclass
+class App():
+    funexpr: Expr   
+    arg: Expr      
+    def __str__(self) -> str:
+        return f"{self.funexpr}({self.arg})"
+
+
 type Binding[V] = tuple[str,V]  # this tuple type is always a pair
 type Env[V] = tuple[Binding[V], ...] # this tuple type has arbitrary length 
+
+type Value = int | ImgPath | bool
+
+@dataclass
+class Closure():
+    param: str    
+    body: Expr   
+    env: Env[Value] 
+    def __str__(self) -> str:
+        return "<function>"
 
 from typing import Any
 emptyEnv : Env[Any] = ()  # the empty environment has no bindings
@@ -146,8 +174,6 @@ def lookupEnv[V](name: str, env: Env[V]) -> (V | None) :
         
 class EvalError(Exception):
     pass
-
-type Value = int | ImgPath | bool
 
 def merge(im1: Image.Image, im2: Image.Image) -> Image.Image:
     '''merge function for Pillow images'''
@@ -329,6 +355,30 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                     outfile = "result_rotate.jpg"
                     out.save(outfile)
                     return ImgPath(outfile)
+        case LetFun(fname, param, body, inexp):
+            # Create closure capturing current environment
+            closure = Closure(param, body, env)
+            # Extend environment with function binding
+            newEnv = extendEnv(fname, closure, env)
+            # Evaluate the body expression in new environment
+            return evalInEnv(newEnv, inexp)
+            
+        case App(funexpr, arg):
+            # Evaluate function expression to get closure
+            match evalInEnv(env, funexpr):
+                case Closure(param, body, closure_env):
+                    # Evaluate argument
+                    arg_val = evalInEnv(env, arg)
+                    # Create new environment extending closure's env
+                    call_env = extendEnv(param, arg_val, closure_env)
+                    # Evaluate function body in new environment
+                    return evalInEnv(call_env, body)
+                case _:
+                    raise EvalError("Trying to apply a non-function")
+
+# Add to your run function's match:
+        case Closure(_):
+            print("result <function>")
 
 def run(e: Expr) -> None:
     print(f"running {e}")
