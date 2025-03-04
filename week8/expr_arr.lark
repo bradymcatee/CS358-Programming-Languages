@@ -1,0 +1,38 @@
+%import common.INT -> INT
+%import common.CNAME -> ID
+%import common.WS
+
+%ignore WS
+
+?expr: expr0 ";" expr -> seq
+     | expr0
+
+?expr0: atom "[" expr "]" ":=" expr01 -> set
+      | expr01
+
+?expr01: "ifnz" expr "then" expr "else" expr0 -> ifnz
+       | expr1
+
+?expr1: expr1 "+" term  -> plus
+     | expr1 "-" term -> minus
+     | term
+
+?term: term "*" factor -> times
+     | term "/" factor -> divide
+     | factor
+
+?factor: "-" factor  -> neg
+       |  atom
+
+?args: (expr ("," expr)*)? -> args
+
+?atom: ID  -> id
+     | INT -> int
+     | atom "(" expr ")" -> app
+     | "(" expr ")"    
+     | "let" ID "=" expr "in" expr "end" -> let
+     | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
+     | "[" args "]" -> arr
+     | atom "[" expr "]" -> get
+
+

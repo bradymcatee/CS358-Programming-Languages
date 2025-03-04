@@ -1,0 +1,38 @@
+%import common.INT -> INT
+%import common.CNAME -> ID
+%import common.WS
+
+%ignore WS
+
+?block: "{" decls stmts "}" -> block 
+
+?decls: (decl ";")* -> decls
+
+?decl: "var" ID ":=" expr -> vardecl
+
+?stmts: (stmt (";" stmt)*)? -> stmts
+
+?stmt: ID ":=" expr -> assign
+     | "ifnz" expr "then" stmt "else" stmt -> ifnz
+     | "whilenz" expr "do" stmt -> whilenz
+     | "print" expr  -> print_
+     | "for" ID "in" expr "to" expr "do" stmt -> for_
+     | block
+
+?expr: expr "+" term  -> plus
+     | expr "-" term -> minus
+     | term
+
+?term: term "*" factor -> times
+     | term "/" factor -> divide
+     | factor
+
+?factor: "-" factor  -> neg
+       |  atom
+
+?atom: ID  -> id
+     | INT -> int
+     | "(" expr ")"    
+
+
+      
