@@ -1,51 +1,94 @@
 ?start: expr
 
-expr: let_expr
-    | if_expr
-    | simple_expr
+// Base expression with sequences
+?expr: seq_expr
 
+// Sequence expressions
+seq_expr: non_seq_expr ";" expr -> seq
+        | non_seq_expr
+
+// All non-sequence expressions
+?non_seq_expr: let_expr
+             | if_expr
+             | assign_expr
+             | show_expr
+             | or_expr
+
+// Let expressions
 let_expr: "let" ID "=" expr "in" expr "end" -> let
-    | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
+        | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
 
+// If-then-else expressions
 if_expr: "if" expr "then" expr "else" expr -> if_then_else
 
-?simple_expr: or_expr
+// Assignment expressions
+assign_expr: ID ":=" expr -> assign
 
-?or_expr: or_expr "||" and_expr -> or
-    | and_expr
+// Show expressions
+show_expr: "show" expr -> show
 
-?and_expr: and_expr "&&" comp_expr -> and
-    | comp_expr
+// Logical OR expressions
+?or_expr: or_expr "||" and_expr -> or_
+        | and_expr
 
-?comp_expr: add_expr "==" add_expr -> eq
-    | add_expr "<" add_expr -> lt
-    | add_expr
+// Logical AND expressions
+?and_expr: and_expr "&&" not_expr -> and_
+         | not_expr
 
+// Logical NOT expression
+?not_expr: "!" not_expr -> not_
+         | comp_expr
+
+// Comparison expressions
+?comp_expr: comp_expr "==" add_expr -> eq
+          | comp_expr "<" add_expr -> lt
+          | add_expr
+
+// Addition and subtraction
 ?add_expr: add_expr "+" mul_expr -> add
-    | add_expr "-" mul_expr -> sub 
-    | mul_expr
+         | add_expr "-" mul_expr -> sub
+         | mul_expr
 
-?mul_expr: mul_expr "*" img_expr -> mul
-    | mul_expr "/" img_expr -> div
-    | img_expr
+// Multiplication and division
+?mul_expr: mul_expr "*" unary_expr -> mul
+         | mul_expr "/" unary_expr -> div
+         | unary_expr
 
-?img_expr: img_expr "++" unary_expr -> stitch_horizontal
-    | unary_expr
-
+// Unary operators (negation)
 ?unary_expr: "-" unary_expr -> neg
-    | "@" unary_expr -> rotate90
-    | app_expr
+           | img_expr
 
+// Image operations
+?img_expr: img_expr "++" app_expr -> stitch_horizontal
+         | "@" app_expr -> rotate90
+         | filter_expr
+
+// Filter operations
+?filter_expr: "filter" ID primary_expr -> filter
+           | collage_expr
+
+// Collage operations
+?collage_expr: "collage" "[" expr_list "]" expr "," expr -> collage
+             | app_expr
+
+// Expression list for collage
+expr_list: expr ("," expr)*
+         | -> empty_list
+
+// Function application
 ?app_expr: app_expr "(" expr ")" -> app
-    | primary_expr
+         | primary_expr
 
+// Primary expressions (atoms)
 ?primary_expr: "(" expr ")"
-    | ID -> var
-    | INT -> int_lit
-    | BOOL -> bool_lit
-    | STRING -> image_lit
+             | "read" -> read
+             | ID -> var
+             | INT -> int_lit
+             | "true" -> true_lit
+             | "false" -> false_lit
+             | STRING -> image_lit
 
-BOOL.2: "true" | "false"
+// Import common terminals
 %import common.ESCAPED_STRING -> STRING
 %import common.INT
 %import common.CNAME -> ID

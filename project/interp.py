@@ -5,6 +5,7 @@
 from dataclasses import dataclass
 from PIL import Image
 from typing import Callable
+import sys
 
 @dataclass
 class ImgPath():
@@ -14,7 +15,7 @@ class ImgPath():
 
 type Literal = int | bool | ImgPath
 
-type Expr = Add | Sub | Mul | Div | Neg | And | Or | Not | Let | Name | Eq | Lt | If | StitchHorizontal | Rotate90
+type Expr = Add | Sub | Mul | Div | Neg | And | Or | Not | Let | Name | Eq | Lt | If | Assign | Seq | Show | Read | Letfun | StitchHorizontal | Rotate90 | Filter | Collage
 
 @dataclass
 class Add():
@@ -124,7 +125,7 @@ class Rotate90():
         return f"{self.image} rotated 90 clockwise"
 
 @dataclass
-class LetFun():
+class Letfun():
     fname: str         
     param: str         
     body: Expr        
@@ -139,6 +140,42 @@ class App():
     def __str__(self) -> str:
         return f"{self.funexpr}({self.arg})"
 
+@dataclass
+class Assign():
+    name: str
+    expr: Expr
+    def __str__(self) -> str:
+        return f"{self.name} := {self.expr}"
+
+@dataclass
+class Seq():
+    expr1: Expr
+    expr2: Expr
+    def __str__(self) -> str:
+        return f"({self.expr1}; {self.expr2})"
+@dataclass
+class Show():
+    expr: Expr
+    def __str__(self) -> str:
+        return f"Showing {self.expr}"
+
+@dataclass
+class Read():
+    def __str__(self) -> str:
+        return "read"
+@dataclass
+class Filter():
+    color: str
+    img: ImgPath
+    def __str__(self) -> str:
+        return f"Apply {self.color} filter to {self.img}"
+@dataclass
+class Collage():
+    images: list[Expr]
+    rows: Expr
+    cols: Expr
+    def __str__(self) -> str:
+        return f"Collage of {len(self.images)} images in {self.rows}x{self.cols} grid"
 
 type Binding[V] = tuple[str,V]  # this tuple type is always a pair
 type Env[V] = tuple[Binding[V], ...] # this tuple type has arbitrary length 
@@ -171,6 +208,15 @@ def lookupEnv[V](name: str, env: Env[V]) -> (V | None) :
                 return lookupEnv(name, rest) # type:ignore
         case _ :
             return None        
+
+# model memory locations as (mutable) singleton lists
+type Loc[V] = list[V] # always a singleton list
+def newLoc[V](value: V) -> Loc[V]:
+    return [value]
+def getLoc[V](loc: Loc[V]) -> V:
+    return loc[0]
+def setLoc[V](loc: Loc[V], value: V) -> None:
+    loc[0] = value
         
 class EvalError(Exception):
     pass
@@ -245,10 +291,11 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
             v = lookupEnv(n, env)
             if v is None:
                 raise EvalError(f"unbound name {n}")
-            return v
+            return getLoc(v)
         case Let(n,d,b):
             v = evalInEnv(env, d)
-            newEnv = extendEnv(n, v, env)
+            l = newLoc(v)
+            newEnv = extendEnv(n, l, env)
             return evalInEnv(newEnv, b)
         case Or(l,r):
             match (evalInEnv(env, l), r):
@@ -355,28 +402,160 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                     outfile = "result_rotate.jpg"
                     out.save(outfile)
                     return ImgPath(outfile)
-        case LetFun(fname, param, body, inexp):
-            # Create closure capturing current environment
+
+        case Filter(color, img_expr):
+            match evalInEnv(env, img_expr):
+                case ImgPath(path):
+                    try:
+                        img = Image.open(path.path)
+                    except:
+                        raise ValueError(f"Image path not found {path.path}")
+                    if color == "red":
+                        r, g, b = img.split()
+                        img = Image.merge("RGB", (r, Image.new('L', img.size, 0), Image.new('L', img.size, 0)))
+                    elif color == "green":
+                        r, g, b = img.split()
+                        img = Image.merge("RGB", (Image.new('L', img.size, 0), g, Image.new('L', img.size, 0)))
+                    elif color == "blue":
+                        # Keep only blue channel
+                        r, g, b = img.split()
+                        img = Image.merge("RGB", (Image.new('L', img.size, 0), Image.new('L', img.size, 0), b))
+                    elif color == "grayscale":
+                        # Convert to grayscale
+                        img = img.convert("L").convert("RGB")
+                    elif color == "sepia":
+                        # Apply sepia filter
+                        img = img.convert("L")
+                        img = Image.merge("RGB", 
+                            (
+                                img.point(lambda p: p * 1.08),
+                                img.point(lambda p: p * 0.82), 
+                                img.point(lambda p: p * 0.6)
+                            )
+                        )
+                    else:
+                        raise EvalError(f"Unknown filter type: {color}")
+                    
+                    # Save the filtered image
+                    outfile = f"result_filter_{color}.jpg"
+                    img.save(outfile)
+                    return ImgPath(outfile)
+                case _:
+                    raise EvalError("Cannot apply filter to non-image")
+
+        case Collage(image_exprs, rows_expr, cols_expr):
+            # Evaluate all image expressions
+            rows_val = evalInEnv(env, rows_expr)
+            cols_val = evalInEnv(env, cols_expr)
+            if not isinstance(rows_val, int) or not isinstance(cols_val, int):
+                raise EvalError("Rows and columns for collage must be integers")
+            images = []
+            for img_expr in image_exprs:
+                match evalInEnv(env, img_expr):
+                    case ImgPath(path):
+                        try:
+                            img = Image.open(path.path)
+                            images.append(img)
+                        except:
+                            raise ValueError(f"Image path not found: {path.path}")
+                    case _:
+                        raise EvalError("Collage can only contain images")
+            
+            # Calculate the size of the collage
+            if len(images) == 0:
+                raise EvalError("Cannot create an empty collage")
+            
+            # Determine the size of each cell based on the largest image
+            max_width = max(img.width for img in images)
+            max_height = max(img.height for img in images)
+            
+            # Create a new blank image for the collage
+            collage_width = max_width * cols_val
+            collage_height = max_height * rows_val
+            collage = Image.new("RGB", (collage_width, collage_height), (255, 255, 255))
+            
+            # Place each image in the grid
+            for i, img in enumerate(images):
+                if i >= rows_val * cols_val:
+                    break  # Don't exceed the grid size
+                
+                # Calculate position in the grid
+                row = i // cols_val
+                col = i % cols_val
+                
+                # Calculate position in pixels
+                x = col * max_width
+                y = row * max_height
+                
+                # Resize image to fit cell if needed
+                if img.width != max_width or img.height != max_height:
+                    # Resize proportionally to fit within the cell
+                    img.thumbnail((max_width, max_height), Image.LANCZOS)
+                
+                # Calculate centering offsets
+                x_offset = (max_width - img.width) // 2
+                y_offset = (max_height - img.height) // 2
+                
+                # Paste the image
+                collage.paste(img, (x + x_offset, y + y_offset))
+            
+            # Save the collage
+            outfile = "result_collage.jpg"
+            collage.save(outfile)
+            return ImgPath(outfile)
+
+        case Letfun(fname, param, body, inexp):
             closure = Closure(param, body, env)
-            # Extend environment with function binding
-            newEnv = extendEnv(fname, closure, env)
-            # Evaluate the body expression in new environment
+            l = newLoc(closure)
+            newEnv = extendEnv(fname, l, env)
             return evalInEnv(newEnv, inexp)
             
         case App(funexpr, arg):
-            # Evaluate function expression to get closure
             match evalInEnv(env, funexpr):
                 case Closure(param, body, closure_env):
-                    # Evaluate argument
                     arg_val = evalInEnv(env, arg)
-                    # Create new environment extending closure's env
-                    call_env = extendEnv(param, arg_val, closure_env)
-                    # Evaluate function body in new environment
+                    l = newLoc(arg_val)
+                    call_env = extendEnv(param, l, closure_env)
                     return evalInEnv(call_env, body)
                 case _:
                     raise EvalError("Trying to apply a non-function")
+        case Assign(n, e):
+            l = lookupEnv(n, env)
+            if l is None:
+                raise EvalError(f"unbound name {n}")
+            if isinstance(getLoc(l), Closure):
+                raise EvalError(f"cannot assign to function {n}")
+            v = evalInEnv(env, e)
+            setLoc(l,v)
+            return v
 
-# Add to your run function's match:
+        case Seq(f, s):
+            evalInEnv(env, f)
+            return evalInEnv(env ,s)
+
+        case Show(e):
+            v = evalInEnv(env, e)
+            try:
+                match v:
+                    case int(i):
+                        print(f"result {i}")
+                    case bool(b):
+                        print(f"result {b}")
+                    case ImgPath(a):
+                        img = Image.open(a)
+                        img.show()
+            except EvalError as err:
+                print(err)
+            return v
+
+        case Read():
+            try:
+                user_input = input("Enter an integer: ")
+                val = int(user_input)
+                return val
+            except ValueError:
+                raise EvalError("Input is not a valid integer")
+
         case Closure(_):
             print("result <function>")
 
@@ -393,35 +572,6 @@ def run(e: Expr) -> None:
                 img.show()
     except EvalError as err:
         print(err)
-
-a : Expr = Let('x', Add(Lit(1), Lit(2)), 
-                    Sub(Name('x'), Lit(3)))
-
-b : Expr = Let('x', Lit(1),
-                    Let('x', Lit(2), 
-                             Mul(Name('x'), Lit(3))))
-
-c : Expr = Add(Let('x', Lit(1), 
-                        Sub(Name('x'), Lit(2))),
-               Mul(Name('x'), Lit(3)))
-
-d : Expr = Add(Lit(1), Div(Lit(2), Lit(0)))
-
-f : Expr =  Let('x', Lit(2), 
-                  If(Eq(Name('x'), Lit(5)), Add(Name('x'), Lit(5)), Sub(Lit(8), Name('x'))))
-
-g : Expr = StitchHorizontal(Lit(ImgPath("hopper.jpg")), Lit(ImgPath("hopper.jpg")))
-
-h : Expr = Rotate90(Lit(ImgPath("hopper.jpg")))
-
-run(a)
-run(b)
-run(c)
-
-run(d)
-run(f)
-run(g)
-run(h)
 
 '''
 I decided to implement the "Images" DSL for this project 
